@@ -2,13 +2,12 @@ import { h } from 'preact'
 
 import { UIPlugin } from '@uppy/core'
 
-import getFileTypeExtension from '@uppy/utils/lib/getFileTypeExtension'
+import { MediaRecorder, register } from 'extendable-media-recorder'
+import { connect } from 'extendable-media-recorder-wav-encoder'
 import supportsMediaRecorder from './supportsMediaRecorder.js'
 import RecordingScreen from './RecordingScreen.jsx'
 import PermissionsScreen from './PermissionsScreen.jsx'
 import locale from './locale.js'
-import { MediaRecorder, register } from 'extendable-media-recorder'
-import { connect } from 'extendable-media-recorder-wav-encoder'
 
 import packageJson from '../package.json'
 
@@ -270,7 +269,7 @@ export default class Audio extends UIPlugin {
     // attribute in order to determine the correct MIME type.
     const mimeType = this.#recordingChunks.find(blob => blob.type?.length > 0).type
 
-    const fileExtension = getFileTypeExtension(mimeType)
+    const fileExtension = this.getFileTypeExtension(mimeType)
 
     if (!fileExtension) {
       return Promise.reject(new Error(`Could not retrieve recording: Unsupported media type "${mimeType}"`))
@@ -373,6 +372,17 @@ export default class Audio extends UIPlugin {
         }
       }
     }
+  }
+
+  getFileTypeExtension = (mimeType) => {
+    const ext = {
+      'audio/mp3': 'mp3',
+      'audio/mp4': 'mp4',
+      'audio/ogg': 'ogg',
+      'audio/wav': 'wav',
+      'audio/webm': 'webm',
+    }
+    return ext[mimeType] || null
   }
 
   uninstall () {
