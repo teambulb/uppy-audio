@@ -1,10 +1,12 @@
-# @uppy/audio
+# @uppy/audio (Bulb fork)
 
 <img src="https://uppy.io/images/logos/uppy-dog-head-arrow.svg" width="120" alt="Uppy logo: a superman puppy in a pink suit" align="right">
 
-<a href="https://www.npmjs.com/package/@uppy/audio"><img src="https://img.shields.io/npm/v/@uppy/webcam.svg?style=flat-square"></a> <img src="https://github.com/transloadit/uppy/workflows/Tests/badge.svg" alt="CI status for Uppy tests"> <img src="https://github.com/transloadit/uppy/workflows/Companion/badge.svg" alt="CI status for Companion tests"> <img src="https://github.com/transloadit/uppy/workflows/End-to-end%20tests/badge.svg" alt="CI status for browser tests">
-
 The Audio plugin for Uppy lets you record audio using a built-in or external microphone, or any other audio device, on desktop and mobile.
+
+This custom fork records WAV audio using `extendable-media-recorder` and `extendable-media-recorder-wav-encoder`. Version **2.0.0** requires **@uppy/core ^5.2.0** and no longer supports Uppy 3.
+
+The recorder is imported locally and does not replace the browser's global `MediaRecorder`, keeping webcam and screen capture independent.
 
 Uppy is being developed by the folks at [Transloadit](https://transloadit.com), a versatile file encoding service.
 
@@ -13,22 +15,34 @@ Uppy is being developed by the folks at [Transloadit](https://transloadit.com), 
 ```js
 import Uppy from '@uppy/core'
 import Audio from '@uppy/audio'
+import '@uppy/audio/dist/style.css'
 
 const uppy = new Uppy()
-uppy.use(Audio)
+uppy.use(Audio, {
+  target: '#audio',
+  preferredAudioMimeType: 'audio/wav', // Default for this fork.
+  showAudioSourceDropdown: true,
+})
 ```
+
+The target element must exist before installing the plugin. Audio source selection, recording preview, discard, submit, and Uppy recording size restrictions are supported. Microphone access requires user permission and HTTPS or localhost.
 
 ## Installation
 
-```bash
-$ npm install @uppy/audio
+Keep this Git fork as the application's dependency. After committing and pushing the changes to the fork, replace `<COMMIT_SHA>` with the new full commit hash in the consuming application's `package.json`:
+
+```json
+{
+  "@uppy/core": "5.2.0",
+  "@uppy/audio": "git+https://github.com/teambulb/uppy-audio.git#<COMMIT_SHA>"
+}
 ```
 
-Alternatively, you can also use this plugin in a pre-built bundle from Transloadit’s CDN: Edgly. In that case `Uppy` will attach itself to the global `window.Uppy` object. See the [main Uppy documentation](https://uppy.io/docs/#Installation) for instructions.
+Then run `npm install` and commit the updated application lockfile. The old `aa36496bedc22b879f3ed3b17cf744bee246a290` pin does not include the Uppy 5 migration. Installing the official npm package or a Transloadit CDN bundle does not provide this fork's WAV integration.
 
 ## Documentation
 
-Documentation for this plugin can be found on the [Uppy website](https://uppy.io/docs/webcam).
+See the [changelog](./CHANGELOG.md) for this fork's Uppy 5 migration details.
 
 ## License
 

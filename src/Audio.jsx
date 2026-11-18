@@ -11,11 +11,29 @@ import locale from './locale.js'
 
 import packageJson from '../package.json'
 
+// Share registration across recordings and plugin instances; retry failed initialization.
+let wavEncoder
+function initializeWavEncoder () {
+  if (!wavEncoder) {
+    wavEncoder = connect().then(register).catch((err) => {
+      wavEncoder = null
+      throw err
+    })
+  }
+  return wavEncoder
+}
+
 /**
  * Audio recording plugin
  */
 export default class Audio extends UIPlugin {
   static VERSION = packageJson.version
+
+  #startRequest = null
+
+  #recordingStartPending = false
+
+  #recordingStopPromise = null
 
   #stream = null
 
@@ -48,7 +66,7 @@ export default class Audio extends UIPlugin {
 
     this.defaultLocale = locale
 
-    this.opts = { ...opts }
+    this.opts = { preferredAudioMimeType: 'audio/wav', ...opts }
 
     this.i18nInit()
     this.title = this.i18n('pluginNameAudio')
@@ -80,15 +98,21 @@ export default class Audio extends UIPlugin {
     }
 
     this.#audioActive = true
+    const request = this.#startRequest = {}
 
-    this.#hasAudioCheck().then(hasAudio => {
+    return this.#hasAudioCheck().then(hasAudio => {
+      if (request !== this.#startRequest) return
       this.setPluginState({
         hasAudio,
       })
 
       // ask user for access to their camera
-      return this.#mediaDevices.getUserMedia({ audio: true })
+      return this.#mediaDevices.getUserMedia({ audio: options?.deviceId ? { deviceId: { exact: options.deviceId } } : true })
         .then((stream) => {
+          if (request !== this.#startRequest) {
+            stream.getTracks().forEach(track => track.stop())
+            return
+          }
           this.#stream = stream
 
           let currentDeviceId = null
@@ -113,6 +137,7 @@ export default class Audio extends UIPlugin {
           })
         })
         .catch((err) => {
+          if (request !== this.#startRequest) return
           this.setPluginState({
             audioReady: false,
             cameraError: err,
@@ -135,10 +160,20 @@ export default class Audio extends UIPlugin {
   }
 
   #startRecording = async () => {
+    if (this.#recordingStartPending || this.#recorder || !this.#stream) return
+    this.#recordingStartPending = true
+    const stream = this.#stream
     try {
-      await register(await connect())
-      // eslint-disable-next-line no-empty
-    } catch (e) {}
+      await initializeWavEncoder()
+    } catch (err) {
+      this.uppy.log(err, 'error')
+      this.uppy.info(err.message, 'error')
+      return
+    } finally {
+      this.#recordingStartPending = false
+    }
+    // The view may have closed or changed source while the encoder initialized.
+    if (stream !== this.#stream) return
 
     this.#recorder = new MediaRecorder(this.#stream, this.#getMediaRecorderMimeType())
     this.#recordingChunks = []
@@ -180,6 +215,9 @@ export default class Audio extends UIPlugin {
   }
 
   #stopRecording = () => {
+    if (this.#recordingStopPromise) return this.#recordingStopPromise
+    if (!this.#recorder || this.#recorder.state === 'inactive') return Promise.resolve()
+    const stream = this.#stream
     const stopped = new Promise((resolve) => {
       this.#recorder.addEventListener('stop', () => {
         resolve()
@@ -190,12 +228,14 @@ export default class Audio extends UIPlugin {
       this.setPluginState({ recordingLengthSeconds: 0 })
     })
 
-    return stopped.then(() => {
+    this.#recordingStopPromise = stopped.then(() => {
+      if (!stream || stream !== this.#stream) return
       this.setPluginState({
         isRecording: false,
       })
       return this.#getAudio()
     }).then((file) => {
+      if (!stream || stream !== this.#stream) return
       try {
         this.#capturedMediaFile = file
         // create object url for capture result preview
@@ -215,7 +255,10 @@ export default class Audio extends UIPlugin {
       this.#recordingChunks = null
       this.#recorder = null
       throw error
+    }).finally(() => {
+      this.#recordingStopPromise = null
     })
+    return this.#recordingStopPromise
   }
 
   #discardRecordedAudio = () => {
@@ -237,25 +280,23 @@ export default class Audio extends UIPlugin {
   }
 
   #stop = async () => {
-    if (this.#stream) {
-      const audioTracks = this.#stream.getAudioTracks()
+    this.#startRequest = {}
+    const stream = this.#stream
+    this.#stream = null
+    clearInterval(this.recordingLengthTimer)
+    if (stream) {
+      const audioTracks = stream.getAudioTracks()
       audioTracks.forEach((track) => track.stop())
     }
 
-    if (this.#recorder) {
-      await new Promise((resolve) => {
-        this.#recorder.addEventListener('stop', resolve, { once: true })
-        this.#recorder.stop()
-
-        clearInterval(this.recordingLengthTimer)
-      })
-    }
+    await this.#stopRecording()
 
     this.#recordingChunks = null
     this.#recorder = null
     this.#audioActive = false
     this.#stream = null
 
+    if (!this.uppy.getPlugin(this.id)) return
     this.setPluginState({
       recordedAudio: null,
       isRecording: false,
@@ -287,9 +328,11 @@ export default class Audio extends UIPlugin {
     return Promise.resolve(file)
   }
 
-  #changeSource = (deviceId) => {
-    this.#stop()
-    this.#start({ deviceId })
+  #changeSource = async (deviceId) => {
+    const stopped = this.#stop()
+    const request = this.#startRequest
+    await stopped
+    if (request === this.#startRequest) await this.#start({ deviceId })
   }
 
   #updateSources = () => {
@@ -386,10 +429,7 @@ export default class Audio extends UIPlugin {
   }
 
   uninstall () {
-    if (this.#stream) {
-      this.#stop()
-    }
-
+    this.#stop()
     this.unmount()
   }
 }

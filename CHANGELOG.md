@@ -1,5 +1,17 @@
 # @uppy/audio
 
+## 2.0.0
+
+Unreleased
+
+- Require Uppy core ^5.2.0 and update @uppy/utils to ^7.1.4. Uppy 3 is no longer supported.
+- Update plugin options, generic declarations, locale types, and plugin registration types for Uppy 5.
+- Declare the extendable recorder and WAV encoder dependencies, default to audio/wav, and keep the recorder isolated from the browser's global MediaRecorder.
+- Share encoder initialization across recordings and plugin instances, report initialization failures, and allow retries.
+- Guard concurrent recording starts and stops, cancel pending startup, and release microphone streams that arrive after cancellation.
+- Request the selected microphone and wait for the previous recording to stop before changing sources.
+- Preserve recording preview, discard, submit, size limits, and the @uppy/audio/dist/style.css import.
+
 ## 1.0.3
 
 Released: 2023-01-26
