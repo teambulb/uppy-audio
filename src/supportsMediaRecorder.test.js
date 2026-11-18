@@ -1,25 +1,24 @@
 /* eslint-disable max-classes-per-file */
-import { describe, expect, it } from '@jest/globals'
-import supportsMediaRecorder from './supportsMediaRecorder.js'
+import { describe, expect, it, jest } from '@jest/globals'
+
+async function supportsRecorder (MediaRecorder) {
+  jest.resetModules()
+  jest.unstable_mockModule('extendable-media-recorder', () => ({ MediaRecorder }))
+  const { default: supportsMediaRecorder } = await import('./supportsMediaRecorder.js')
+  return supportsMediaRecorder()
+}
 
 describe('supportsMediaRecorder', () => {
-  it('should return true if MediaRecorder is supported', () => {
-    globalThis.MediaRecorder = class MediaRecorder {
+  it('detects the imported recorder without relying on the browser global', async () => {
+    const nativeRecorder = globalThis.MediaRecorder
+    expect(await supportsRecorder(class MediaRecorder {
       start () {} // eslint-disable-line
-    }
-    expect(supportsMediaRecorder()).toEqual(true)
+    })).toEqual(true)
+    expect(globalThis.MediaRecorder).toBe(nativeRecorder)
   })
 
-  it('should return false if MediaRecorder is not supported', () => {
-    globalThis.MediaRecorder = undefined
-    expect(supportsMediaRecorder()).toEqual(false)
-
-    globalThis.MediaRecorder = class MediaRecorder {}
-    expect(supportsMediaRecorder()).toEqual(false)
-
-    globalThis.MediaRecorder = class MediaRecorder {
-      foo () {} // eslint-disable-line
-    }
-    expect(supportsMediaRecorder()).toEqual(false)
+  it('returns false if the imported recorder is not supported', async () => {
+    expect(await supportsRecorder(undefined)).toEqual(false)
+    expect(await supportsRecorder(class MediaRecorder {})).toEqual(false)
   })
 })
